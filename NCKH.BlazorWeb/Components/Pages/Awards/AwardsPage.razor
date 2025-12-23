@@ -1,1 +1,291 @@
+@page "/awards"
+@using NCKH.Core.Entities
+@using System.Net.Http.Json
+@inject HttpClient Http
+@rendermode InteractiveServer
 
+<div class="container-fluid">
+    <h2 class="text-primary mb-4 text-center">GIẢI ĐỀ TÀI KHSV</h2>
+    
+    @if (! string.IsNullOrEmpty(message))
+    {
+        <div class="alert @(isError ? "alert-danger" : "alert-success") alert-dismissible fade show">
+            @message
+            <button type="button" class="btn-close" @onclick="() => message = null"></button>
+        </div>
+    }
+    
+    <!-- Nút Thêm mới -->
+    <div class="mb-3">
+        <button class="btn btn-primary" @onclick="ShowAddModal">
+            <i class="bi bi-plus-circle"></i> THÊM MỚI
+        </button>
+    </div>
+    
+    <!-- Bảng danh sách -->
+    <div class="card">
+        <div class="card-body p-0">
+            <table class="table table-bordered table-hover mb-0">
+                <thead class="table-primary">
+                    <tr>
+                        <th style="width: 80px;">STT</th>
+                        <th style="width: 120px;">Mã đề tài</th>
+                        <th>Giải</th>
+                        <th style="width: 100px;">Điểm</th>
+                        <th style="width: 120px;">Cấp giải</th>
+                        <th style="width: 200px;">Ghi chú</th>
+                        <th style="width: 100px;">Chi tiết</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (awards == null)
+                    {
+                        <tr><td colspan="7" class="text-center">Đang tải...</td></tr>
+                    }
+                    else if (! awards.Any())
+                    {
+                        <tr><td colspan="7" class="text-center text-muted">Không có dữ liệu</td></tr>
+                    }
+                    else
+                    {
+                        int stt = 1;
+                        @foreach (var award in awards)
+                        {
+                            <tr>
+                                <td class="text-center">@stt</td>
+                                <td>@award.MaDeTai</td>
+                                <td>@award.TenGiai</td>
+                                <td class="text-center">@award. Diem</td>
+                                <td>@award.CapGiai</td>
+                                <td>@award.GhiChu</td>
+                                <td class="text-center">
+                                    <button class="btn btn-danger btn-sm" @onclick="() => DeleteAward(award.Id)">
+                                        Xóa
+                                    </button>
+                                </td>
+                            </tr>
+                            stt++;
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm mới -->
+@if (showModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">THÊM MỚI GIẢI ĐỀ TÀI KHSV</h5>
+                    <button type="button" class="btn-close btn-close-white" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Mã đề tài (*)</label>
+                        <select class="form-select" @bind="newAward.MaDeTai" @bind:after="OnTopicChanged">
+                            <option value="0">-- Chọn đề tài --</option>
+                            @if (availableTopics != null)
+                            {
+                                @foreach (var topic in availableTopics)
+                                {
+                                    <option value="@topic.MaDeTai">@topic.MaDeTai - @topic.TenDeTai (Điểm: @topic.DiemTrungBinh)</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Điểm (*)</label>
+                        <input type="number" step="0.01" class="form-control" @bind="newAward.Diem" readonly />
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Tên giải (*)</label>
+                        <input type="text" class="form-control" @bind="newAward.TenGiai" />
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Mã giải (*)</label>
+                        <input type="text" class="form-control" @bind="newAward.MaGiai" />
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Cấp giải (*)</label>
+                        <select class="form-select" @bind="newAward.CapGiai">
+                            <option value="">-- Chọn --</option>
+                            <option value="Giải Nhất">Giải Nhất</option>
+                            <option value="Giải Nhì">Giải Nhì</option>
+                            <option value="Giải Ba">Giải Ba</option>
+                            <option value="Giải Khuyến khích">Giải Khuyến khích</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Ghi chú</label>
+                        <textarea class="form-control" rows="3" @bind="newAward.GhiChu"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" @onclick="HandleSubmit">
+                        <i class="bi bi-floppy"></i> LƯU DỮ LIỆU
+                    </button>
+                    <button type="button" class="btn btn-danger" @onclick="CloseModal">
+                        <i class="bi bi-x-circle"></i> THOÁT
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<AwardDto>? awards;
+    private List<TopicDto>? availableTopics;
+    private Award newAward = new();
+    private string?  message;
+    private bool isError = false;
+    private bool showModal = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAwards();
+        await LoadAvailableTopics();
+    }
+
+    private async Task LoadAwards()
+    {
+        try
+        {
+            awards = await Http.GetFromJsonAsync<List<AwardDto>>("api/awards");
+        }
+        catch (Exception ex)
+        {
+            awards = new List<AwardDto>();
+            message = $"Lỗi tải dữ liệu:  {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private async Task LoadAvailableTopics()
+    {
+        try
+        {
+            availableTopics = await Http.GetFromJsonAsync<List<TopicDto>>("api/awards/topics");
+        }
+        catch
+        {
+            availableTopics = new List<TopicDto>();
+        }
+    }
+
+    private void OnTopicChanged()
+    {
+        if (newAward.MaDeTai > 0 && availableTopics != null)
+        {
+            var topic = availableTopics.FirstOrDefault(t => t.MaDeTai == newAward. MaDeTai);
+            if (topic != null)
+            {
+                newAward. Diem = topic.DiemTrungBinh;
+            }
+        }
+    }
+
+    private void ShowAddModal()
+    {
+        newAward = new Award();
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (newAward.MaDeTai == 0)
+        {
+            message = "Vui lòng chọn đề tài! ";
+            isError = true;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(newAward.TenGiai))
+        {
+            message = "Vui lòng nhập tên giải!";
+            isError = true;
+            return;
+        }
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/awards", newAward);
+            if (response. IsSuccessStatusCode)
+            {
+                message = "Cập nhật giải thành công!";
+                isError = false;
+                showModal = false;
+                await LoadAwards();
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                message = $"Lỗi:  {error}";
+                isError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            message = $"Lỗi:  {ex.Message}";
+            isError = true;
+        }
+    }
+
+    private async Task DeleteAward(int id)
+    {
+        if (confirm("Bạn có chắc muốn xóa giải này?"))
+        {
+            try
+            {
+                var response = await Http.DeleteAsync($"api/awards/{id}");
+                if (response.IsSuccessStatusCode)
+                {
+                    message = "Đã xóa giải";
+                    isError = false;
+                    await LoadAwards();
+                }
+            }
+            catch (Exception ex)
+            {
+                message = $"Lỗi:  {ex.Message}";
+                isError = true;
+            }
+        }
+    }
+
+    private bool confirm(string msg) => true; // Blazor không có confirm, cần dùng JS
+
+    // DTOs
+    public class AwardDto
+    {
+        public int Id { get; set; }
+        public int MaDeTai { get; set; }
+        public string TenDeTai { get; set; } = "";
+        public decimal Diem { get; set; }
+        public string TenGiai { get; set; } = "";
+        public string MaGiai { get; set; } = "";
+        public string CapGiai { get; set; } = "";
+        public string?  GhiChu { get; set; }
+    }
+
+    public class TopicDto
+    {
+        public int MaDeTai { get; set; }
+        public string TenDeTai { get; set; } = "";
+        public decimal DiemTrungBinh { get; set; }
+    }
+}
