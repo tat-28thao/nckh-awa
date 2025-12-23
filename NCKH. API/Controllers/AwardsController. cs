@@ -1,1 +1,100 @@
+using Microsoft.AspNetCore. Mvc;
+using Microsoft.EntityFrameworkCore;
+using NCKH.Core.Entities;
+using NCKH.Infrastructure.Data;
 
+namespace NCKH.API.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class AwardsController : ControllerBase
+{
+    private readonly NCKHDbContext _context;
+
+    public AwardsController(NCKHDbContext context)
+    {
+        _context = context;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<object>>> GetAwards()
+    {
+        var awards = await _context.Awards
+            .Include(a => a.Topic)
+            .Select(a => new
+            {
+                a.Id,
+                a.MaDeTai,
+                TenDeTai = a.Topic != null ? a.Topic.TenDeTai : "",
+                a.Diem,
+                a.TenGiai,
+                a.MaGiai,
+                a.CapGiai,
+                a.GhiChu,
+                a.NgayTrao
+            })
+            .ToListAsync();
+
+        return Ok(awards);
+    }
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<Award>> GetAward(int id)
+    {
+        var award = await _context.Awards. FindAsync(id);
+        if (award == null) return NotFound();
+        return award;
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<Award>> CreateAward(Award award)
+    {
+        // Kiểm tra đề tài có tồn tại không
+        var topic = await _context.Topics.FindAsync(award.MaDeTai);
+        if (topic == null)
+        {
+            return BadRequest("Mã đề tài không tồn tại");
+        }
+
+        _context.Awards.Add(award);
+        await _context.SaveChangesAsync();
+        return CreatedAtAction(nameof(GetAward), new { id = award.Id }, award);
+    }
+
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateAward(int id, Award award)
+    {
+        if (id != award.Id) return BadRequest();
+        _context.Entry(award).State = EntityState.Modified;
+        await _context.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteAward(int id)
+    {
+        var award = await _context.Awards.FindAsync(id);
+        if (award == null) return NotFound();
+        _context.Awards.Remove(award);
+        await _context. SaveChangesAsync();
+        return NoContent();
+    }
+
+    // API lấy danh sách đề tài để chọn
+    [HttpGet("topics")]
+    public async Task<ActionResult<IEnumerable<object>>> GetTopicsForAward()
+    {
+        var topics = await _context.Topics
+            .Include(t => t.FinalResult)
+            .Where(t => t.FinalResult != null && t.FinalResult.DiemTrungBinh > 0)
+            .Select(t => new
+            {
+                t.MaDeTai,
+                t. TenDeTai,
+                DiemTrungBinh = t.FinalResult!.DiemTrungBinh
+            })
+            .ToListAsync();
+
+        return Ok(topics);
+    }
+}
