@@ -1,1 +1,2 @@
-public DbSet<Award> Awards { get; set; }
+public DbSet<Award> Awards { get; set; } // them vao 
+
